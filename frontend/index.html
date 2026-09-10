@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DevOps Incident-Response Agent & Deterministic Evaluation Harness</title>
+  <meta name="description" content="Autonomous SRE Target Agent with a Deterministic Evaluation Harness, Scenario Bank, and Real-time Incident Triage." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+  <!-- Header / Navigation Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="header-title">DevOps Incident-Response Agent</h1>
+        <div class="header-subtitle">Deterministic Evaluation Harness & SRE Worker Engine</div>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <nav class="nav-tabs" id="navTabs">
+        <button class="nav-tab active" data-tab="simulator" id="tabSimulatorBtn">
+          <span class="tab-icon">⚡</span> Incident Triage
+        </button>
+        <button class="nav-tab" data-tab="evaluation" id="tabEvaluationBtn">
+          <span class="tab-icon">📊</span> Evaluation & Regression
+        </button>
+        <button class="nav-tab" data-tab="scenarios" id="tabScenariosBtn">
+          <span class="tab-icon">📁</span> Scenario Bank (18)
+        </button>
+      </nav>
+    </div>
+
+    <div class="header-right">
+      <div class="provider-selector">
+        <label for="providerSelect" class="provider-label">Engine:</label>
+        <select id="providerSelect" class="select-input">
+          <option value="mock" selected>Mock SRE Reasoner (Deterministic)</option>
+          <option value="gemini">Google Gemini API</option>
+          <option value="openai">OpenAI / Local LLM</option>
+        </select>
+      </div>
+      <div class="system-status-badge">
+        <span class="pulse-dot"></span>
+        <span id="systemStatusText">System Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-container">
+    
+    <!-- TAB 1: INCIDENT TRIAGE SIMULATOR -->
+    <section id="tab-simulator" class="tab-content active">
+      <div class="simulator-layout">
+        
+        <!-- Left Sidebar: Scenario Selector & Alert Card -->
+        <div class="simulator-sidebar">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h2 class="card-title">Trigger Incident Alert</h2>
+              <span class="badge badge-accent">Live Simulation</span>
+            </div>
+
+            <div class="form-group">
+              <label for="scenarioSelect" class="form-label">Select Incident Scenario:</label>
+              <select id="scenarioSelect" class="select-input full-width">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+
+            <div id="activeAlertCard" class="alert-box alert-critical">
+              <div class="alert-header">
+                <span class="severity-pill" id="alertSeverityPill">CRITICAL</span>
+                <span class="alert-service" id="alertServiceTag">checkout-service</span>
+              </div>
+              <div class="alert-metric-row">
+                <span class="metric-name" id="alertMetricName">Metric: http_5xx_rate</span>
+                <span class="metric-val" id="alertMetricVal">34.8% (Threshold: &gt;2%)</span>
+              </div>
+              <p class="alert-desc" id="alertMessageText">Checkout service error rate spiked to 34.8% following deployment.</p>
+              <div class="alert-time" id="alertTimestampText">Triggered: 2026-09-10T14:32:00Z</div>
+            </div>
+
+            <div class="action-buttons">
+              <button id="runTriageBtn" class="btn btn-primary btn-glow full-width">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                Launch Autonomous Agent Triage
+              </button>
+            </div>
+
+            <div class="safety-indicator-card">
+              <div class="safety-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <span>Safety Guardrails Enforced</span>
+              </div>
+              <p class="safety-desc">Target Agent restricted to observation &amp; human-in-the-loop recommendations. Direct destructive script execution is strictly blocked.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right / Center: Real-time ReAct Investigation Timeline -->
+        <div class="simulator-main">
+          
+          <!-- Agent Thought & Tool Timeline -->
+          <div class="card glass-card investigation-panel">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Investigation Trace (Worker Reasoning Loop)</h2>
+                <div class="card-subtitle">Real-time ReAct decisions: Alert &rarr; Tool Selection &rarr; Data Gathering &rarr; Diagnosis</div>
+              </div>
+              <div class="execution-meta" id="executionMeta" style="display: none;">
+                <span class="badge badge-outline" id="stepCounterBadge">0 Steps</span>
+                <span class="badge badge-outline" id="durationBadge">0.00s</span>
+              </div>
+            </div>
+
+            <div class="timeline-feed" id="timelineFeed">
+              <div class="empty-state" id="timelinePlaceholder">
+                <div class="empty-icon">⚡</div>
+                <div class="empty-title">Ready for Incident Investigation</div>
+                <div class="empty-subtitle">Select an incident scenario and click <strong>"Launch Autonomous Agent Triage"</strong> to watch the agent analyze telemetry, call diagnostic tools, and deduce the root cause.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Final Diagnostic Report Card -->
+          <div class="card glass-card report-panel" id="finalReportCard" style="display: none;">
+            <div class="report-header">
+              <div class="report-title-group">
+                <span class="report-status-icon">📋</span>
+                <div>
+                  <h3 class="report-title">Final Incident Diagnostic &amp; Remediation Report</h3>
+                  <div class="report-subtitle" id="reportIncidentSummary">Checkout service incident resolved</div>
+                </div>
+              </div>
+              <div class="report-badges">
+                <span class="badge badge-success" id="safetyComplianceBadge">🛡️ Safe: Human-in-Loop</span>
+                <span class="badge badge-accent" id="reportCategoryBadge">bad_deployment</span>
+              </div>
+            </div>
+
+            <div class="report-body">
+              <div class="report-section">
+                <h4 class="section-heading">Root Cause Analysis</h4>
+                <div class="root-cause-box" id="reportRootCauseText">
+                  Release v2.4.1 introduced a regression in PaymentProcessor.java where paymentToken is dereferenced without a null check.
+                </div>
+              </div>
+
+              <div class="report-grid-2">
+                <div class="report-section">
+                  <h4 class="section-heading">Telemetry Evidence Gathered</h4>
+                  <ul class="bullet-list" id="reportEvidenceList">
+                    <!-- Populated dynamically -->
+                  </ul>
+                </div>
+
+                <div class="report-section">
+                  <h4 class="section-heading">Actionable Human Remediation Plan</h4>
+                  <ol class="numbered-list" id="reportRemediationList">
+                    <!-- Populated dynamically -->
+                  </ol>
+                </div>
+              </div>
+
+              <div class="report-section">
+                <h4 class="section-heading">Long-Term Preventative Measures</h4>
+                <ul class="bullet-list" id="reportPreventativeList">
+                  <!-- Populated dynamically -->
+                </ul>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 2: EVALUATION & REGRESSION SUITE -->
+    <section id="tab-evaluation" class="tab-content">
+      <div class="evaluation-container">
+        
+        <!-- Top KPI Scoreboard -->
+        <div class="kpi-grid">
+          <div class="kpi-card glass-card">
+            <div class="kpi-label">Pass Rate</div>
+            <div class="kpi-value text-success" id="kpiPassRate">100%</div>
+            <div class="kpi-sub" id="kpiPassCount">18 of 18 Scenarios Passed</div>
+          </div>
+
+          <div class="kpi-card glass-card">
+            <div class="kpi-label">Average Composite Score</div>
+            <div class="kpi-value text-accent" id="kpiAvgScore">95.9%</div>
+            <div class="kpi-sub">Rule-based scoring (Threshold &gt;=75%)</div>
+          </div>
+
+          <div class="kpi-card glass-card">
+            <div class="kpi-label">Tool Selection Recall</div>
+            <div class="kpi-value text-info" id="kpiToolRecall">100.0%</div>
+            <div class="kpi-sub">Accurate invocation of required SRE tools</div>
+          </div>
+
+          <div class="kpi-card glass-card">
+            <div class="kpi-label">Average Diagnosis Steps</div>
+            <div class="kpi-value text-warning" id="kpiAvgSteps">3.1</div>
+            <div class="kpi-sub">Efficiency &amp; trace economy</div>
+          </div>
+        </div>
+
+        <!-- Evaluation Controls & Header -->
+        <div class="eval-controls-bar glass-card">
+          <div class="controls-left">
+            <div>
+              <h2 class="card-title">Deterministic Regression Test Suite</h2>
+              <div class="card-subtitle">Zero subjective human bias. Evaluates every scenario black-box against fixed rule verifications.</div>
+            </div>
+          </div>
+          <div class="controls-right">
+            <button id="runFullEvalBtn" class="btn btn-primary btn-glow">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              Run Full Regression Suite (18 Scenarios)
+            </button>
+          </div>
+        </div>
+
+        <!-- Matrix Table -->
+        <div class="card glass-card table-card">
+          <div class="table-responsive">
+            <table class="data-table" id="evalScorecardTable">
+              <thead>
+                <tr>
+                  <th>Scenario ID</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th>Composite Score</th>
+                  <th>Tool F1</th>
+                  <th>Param Validity</th>
+                  <th>Root Cause</th>
+                  <th>Safety &amp; Remediation</th>
+                  <th>Steps</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="evalScorecardBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 3: SCENARIO BANK EXPLORER -->
+    <section id="tab-scenarios" class="tab-content">
+      <div class="scenario-catalog-container">
+        <div class="catalog-header glass-card">
+          <div>
+            <h2 class="card-title">Synthetic DevOps Scenario Catalog</h2>
+            <div class="card-subtitle">18 Realistic failure modes with grounded mock telemetry and hidden validation rules.</div>
+          </div>
+          <div class="search-filter-box">
+            <input type="text" id="scenarioSearchInput" class="search-input" placeholder="Search scenarios, services, categories..." />
+          </div>
+        </div>
+
+        <div class="scenario-grid" id="scenarioGrid">
+          <!-- Populated dynamically with scenario cards -->
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Trace Drill-down Modal -->
+  <div class="modal-overlay" id="traceModal" style="display: none;">
+    <div class="modal-content glass-card">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" id="modalTraceTitle">Scenario Run Trace</h3>
+          <div class="modal-subtitle" id="modalTraceSubtitle">Auditable JSON log of thoughts, tool invocations, and grading checks</div>
+        </div>
+        <button class="modal-close-btn" id="closeTraceModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="trace-tabs">
+          <button class="trace-tab active" data-view="timeline">Visual Timeline</button>
+          <button class="trace-tab" data-view="scores">Scorecard Breakdown</button>
+          <button class="trace-tab" data-view="json">Raw JSON Trace</button>
+        </div>
+        <div id="modalTraceContent" class="modal-trace-viewport">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
