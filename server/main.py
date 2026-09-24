@@ -4,6 +4,14 @@ Mounts API endpoints and serves the frontend dashboard.
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Ensure project root is on sys.path for direct execution (e.g. `python server/main.py`)
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -48,14 +56,16 @@ def health_check():
 
 # Mount frontend static directory if exists
 if STATIC_FRONTEND_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_FRONTEND_DIR)), name="static")
+    @app.get("/app.js")
+    def serve_js():
+        return FileResponse(str(STATIC_FRONTEND_DIR / "app.js"), media_type="application/javascript")
 
-    @app.get("/")
-    def serve_frontend_index():
-        index_file = STATIC_FRONTEND_DIR / "index.html"
-        if index_file.exists():
-            return FileResponse(str(index_file))
-        return {"message": "Frontend index.html not found"}
+    @app.get("/index.css")
+    def serve_css():
+        return FileResponse(str(STATIC_FRONTEND_DIR / "index.css"), media_type="text/css")
+
+    app.mount("/static", StaticFiles(directory=str(STATIC_FRONTEND_DIR)), name="static")
+    app.mount("/", StaticFiles(directory=str(STATIC_FRONTEND_DIR), html=True), name="frontend")
 
 
 if __name__ == "__main__":

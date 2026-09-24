@@ -25,7 +25,7 @@ This project addresses this critical gap by building a complete end-to-end ecosy
 
 - Target Agent: An LLM-based autonomous agent that fetches logs, reviews deployments, and determines root cause scenarios.
 
-- Deterministic EvaluationHarness: A scalable test-suite systemensuring the agent's logic is rigorously graded against a battery of realistic, simulated DevOps incidents.
+- Deterministic EvaluationHarness: A scalable test-suite system ensuring the agent's logic is rigorously graded against a battery of realistic, simulated DevOps incidents.
 
 By shifting the paradigm from subjective ad-hoc AI demonstrations to testable, robust software artifacts, this project paves the way for safe, reliable automation in modern Site Reliability Engineering (SRE).
 

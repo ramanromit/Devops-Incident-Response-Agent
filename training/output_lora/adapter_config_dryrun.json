@@ -2,6 +2,7 @@
   "base_model": "meta-llama/Meta-Llama-3-8B-Instruct",
   "lora_r": 16,
   "lora_alpha": 32,
+  "lora_dropout": 0.05,
   "target_modules": [
     "q_proj",
     "k_proj",
