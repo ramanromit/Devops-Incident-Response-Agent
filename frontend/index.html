@@ -44,8 +44,9 @@
         <label for="providerSelect" class="provider-label">Engine:</label>
         <select id="providerSelect" class="select-input">
           <option value="mock" selected>Mock SRE Reasoner (Deterministic)</option>
-          <option value="gemini">Google Gemini API</option>
-          <option value="openai">OpenAI / Local LLM</option>
+          <option value="groq:openai/gpt-oss-120b">Groq — GPT-OSS 120B (openai/gpt-oss-120b)</option>
+          <option value="groq:openai/gpt-oss-20b">Groq — GPT-OSS 20B (openai/gpt-oss-20b)</option>
+          <option value="gemini">Google Gemini API (gemini-flash-lite-latest)</option>
         </select>
       </div>
       <div class="system-status-badge">
@@ -90,12 +91,22 @@
               <div class="alert-time" id="alertTimestampText">Triggered: 2026-09-10T14:32:00Z</div>
             </div>
 
-            <div class="action-buttons">
+            <div class="action-buttons" style="display: flex; flex-direction: column; gap: 10px;">
               <button id="runTriageBtn" class="btn btn-primary btn-glow full-width">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
                 Launch Autonomous Agent Triage
+              </button>
+              <button id="evaluateScenarioBtn" class="btn btn-outline full-width">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                  <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                Run Evaluation on this Scenario
               </button>
             </div>
 
@@ -122,6 +133,7 @@
                 <div class="card-subtitle">Real-time ReAct decisions: Alert &rarr; Tool Selection &rarr; Data Gathering &rarr; Diagnosis</div>
               </div>
               <div class="execution-meta" id="executionMeta" style="display: none;">
+                <span class="badge badge-accent" id="providerBadge">Engine: Mock</span>
                 <span class="badge badge-outline" id="stepCounterBadge">0 Steps</span>
                 <span class="badge badge-outline" id="durationBadge">0.00s</span>
               </div>
@@ -143,7 +155,9 @@
                 <span class="report-status-icon">📋</span>
                 <div>
                   <h3 class="report-title">Final Incident Diagnostic &amp; Remediation Report</h3>
-                  <div class="report-subtitle" id="reportIncidentSummary">Checkout service incident resolved</div>
+                  <div class="report-meta-chips" id="reportMetaChips">
+                    <!-- Populated dynamically -->
+                  </div>
                 </div>
               </div>
               <div class="report-badges">
@@ -153,8 +167,18 @@
             </div>
 
             <div class="report-body">
+              <div class="report-executive-summary" id="reportSummaryBox">
+                <div class="summary-label">
+                  <span class="summary-pin-icon">📌</span>
+                  <span class="summary-pin-text">Executive Incident Summary</span>
+                </div>
+                <div class="summary-text" id="reportIncidentSummary">
+                  Incident triage complete.
+                </div>
+              </div>
+
               <div class="report-section">
-                <h4 class="section-heading">Root Cause Analysis</h4>
+                <h4 class="section-heading"><span>🎯</span> Root Cause Analysis</h4>
                 <div class="root-cause-box" id="reportRootCauseText">
                   Release v2.4.1 introduced a regression in PaymentProcessor.java where paymentToken is dereferenced without a null check.
                 </div>
@@ -162,25 +186,78 @@
 
               <div class="report-grid-2">
                 <div class="report-section">
-                  <h4 class="section-heading">Telemetry Evidence Gathered</h4>
-                  <ul class="bullet-list" id="reportEvidenceList">
-                    <!-- Populated dynamically -->
-                  </ul>
+                  <h4 class="section-heading"><span>📡</span> Telemetry Evidence Gathered</h4>
+                  <div class="evidence-list-container" id="reportEvidenceList">
+                    <!-- Populated dynamically with evidence cards -->
+                  </div>
                 </div>
 
                 <div class="report-section">
-                  <h4 class="section-heading">Actionable Human Remediation Plan</h4>
-                  <ol class="numbered-list" id="reportRemediationList">
-                    <!-- Populated dynamically -->
-                  </ol>
+                  <h4 class="section-heading"><span>🛠️</span> Actionable Human Remediation Plan</h4>
+                  <div class="remediation-list-container" id="reportRemediationList">
+                    <!-- Populated dynamically with step cards -->
+                  </div>
                 </div>
               </div>
 
               <div class="report-section">
-                <h4 class="section-heading">Long-Term Preventative Measures</h4>
-                <ul class="bullet-list" id="reportPreventativeList">
-                  <!-- Populated dynamically -->
-                </ul>
+                <h4 class="section-heading"><span>🛡️</span> Long-Term Preventative Measures</h4>
+                <div class="preventative-list-container" id="reportPreventativeList">
+                  <!-- Populated dynamically with guardrail cards -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Incident Evaluation & Harness Scorecard Card -->
+          <div class="card glass-card report-panel" id="incidentEvaluationCard" style="display: none; margin-top: 24px;">
+            <div class="report-header">
+              <div class="report-title-group">
+                <span class="report-status-icon">📊</span>
+                <div>
+                  <h3 class="report-title">Deterministic Harness Evaluation Scorecard</h3>
+                  <div class="report-subtitle" id="evalEngineLabel">Graded black-box against scenario ground-truth criteria</div>
+                </div>
+              </div>
+              <div class="report-badges">
+                <span class="badge" id="evalVerdictBadge">PASS</span>
+                <span class="badge badge-accent" id="evalCompositeScoreBadge">Score: 0.0%</span>
+              </div>
+            </div>
+
+            <div class="report-body">
+              <div class="kpi-grid" style="margin-bottom: 16px;">
+                <div class="kpi-card glass-card">
+                  <div class="kpi-label">Tool Selection F1</div>
+                  <div class="kpi-value text-accent" id="evalToolF1">0.0%</div>
+                  <div class="kpi-sub" id="evalToolDetails">Required tools called</div>
+                </div>
+                <div class="kpi-card glass-card">
+                  <div class="kpi-label">Parameter Validity</div>
+                  <div class="kpi-value text-info" id="evalParamValidity">0.0%</div>
+                  <div class="kpi-sub" id="evalParamDetails">Service &amp; args valid</div>
+                </div>
+                <div class="kpi-card glass-card">
+                  <div class="kpi-label">Root Cause Correctness</div>
+                  <div class="kpi-value text-warning" id="evalRootCauseScore">0.0%</div>
+                  <div class="kpi-sub" id="evalRootCauseDetails">Category &amp; keywords match</div>
+                </div>
+                <div class="kpi-card glass-card">
+                  <div class="kpi-label">Remediation &amp; Safety</div>
+                  <div class="kpi-value text-success" id="evalSafetyScore">100.0%</div>
+                  <div class="kpi-sub" id="evalSafetyDetails">Human-in-the-loop enforced</div>
+                </div>
+              </div>
+
+              <div id="evalFailureReasonsBox" style="display: none; margin-bottom: 16px;" class="alert-box alert-critical">
+                <strong>Evaluation Notes / Deductions:</strong>
+                <ul id="evalFailureReasonsList" style="margin-top: 6px; padding-left: 18px;"></ul>
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn btn-primary btn-sm" id="viewCurrentTraceBtn">
+                  🔍 Inspect Complete Audit Trace
+                </button>
               </div>
             </div>
           </div>

@@ -20,7 +20,12 @@ class TraceRecorder:
     Captures complete auditable JSON traces of agent steps, tool calls, and reports.
     """
 
-    def __init__(self, scenario: Scenario):
+    def __init__(
+        self,
+        scenario: Scenario,
+        provider: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ):
         self.scenario = scenario
         self.trace_data: Dict[str, Any] = {
             "scenario_id": scenario.id,
@@ -29,9 +34,12 @@ class TraceRecorder:
             "severity": scenario.severity,
             "alert": scenario.alert.model_dump(),
             "started_at": datetime.now(timezone.utc).isoformat(),
+            "provider": provider or "mock",
+            "model_name": model_name,
             "steps": [],
             "report": None,
             "duration_seconds": 0.0,
+            "total_steps": 0,
             "success": False,
         }
 
@@ -47,6 +55,10 @@ class TraceRecorder:
         self.trace_data["duration_seconds"] = execution_result.duration_seconds
         self.trace_data["success"] = execution_result.success
         self.trace_data["total_steps"] = execution_result.total_steps
+        if getattr(execution_result, "provider", None):
+            self.trace_data["provider"] = execution_result.provider
+        if getattr(execution_result, "model_name", None):
+            self.trace_data["model_name"] = execution_result.model_name
         if execution_result.report:
             self.trace_data["report"] = execution_result.report.model_dump()
         if execution_result.error:
@@ -60,3 +72,4 @@ class TraceRecorder:
             json.dump(self.trace_data, f, indent=2)
 
         return str(save_path)
+

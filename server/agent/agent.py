@@ -58,15 +58,24 @@ class IncidentResponseAgent:
                 thought = decision.get("thought", "")
 
                 if action == "finish":
+                    clean_thought = thought or "Investigation completed. Synthesizing diagnosis."
+                    if clean_thought.strip().startswith("#") or len(clean_thought) > 280:
+                        clean_thought = "Investigation completed. Telemetry evidence gathered across logs, metrics, deployment history, and configuration. Root cause diagnosed and remediation plan prepared."
+
                     step = AgentStep(
                         step_number=step_idx,
-                        thought=thought or "Investigation completed. Synthesizing diagnosis.",
+                        thought=clean_thought,
                         timestamp=timestamp,
                     )
                     self.steps.append(step)
+                    step_dict = step.model_dump()
+                    step_dict["thought"] = thought or clean_thought
+                    step_history_dicts.append(step_dict)
                     if step_callback:
                         step_callback(step)
                     break
+
+
 
                 elif action == "call_tool":
                     tool_name = decision.get("tool_name", "")
@@ -100,9 +109,13 @@ class IncidentResponseAgent:
             )
 
             duration = round(time.time() - start_time, 2)
+            provider_name = getattr(self.llm_client, "provider_name", "mock")
+            model_name = getattr(self.llm_client, "model", getattr(self.llm_client, "model_name", None))
             return AgentExecutionResult(
                 scenario_id=self.scenario.id,
                 success=True,
+                provider=provider_name,
+                model_name=model_name,
                 steps=self.steps,
                 report=report,
                 total_steps=len(self.steps),
@@ -111,12 +124,17 @@ class IncidentResponseAgent:
 
         except Exception as e:
             duration = round(time.time() - start_time, 2)
+            provider_name = getattr(self.llm_client, "provider_name", "mock")
+            model_name = getattr(self.llm_client, "model", getattr(self.llm_client, "model_name", None))
             return AgentExecutionResult(
                 scenario_id=self.scenario.id,
                 success=False,
+                provider=provider_name,
+                model_name=model_name,
                 steps=self.steps,
                 report=None,
                 total_steps=len(self.steps),
                 duration_seconds=duration,
                 error=str(e),
             )
+

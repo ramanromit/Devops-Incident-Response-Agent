@@ -24,17 +24,25 @@ RESULTS_DIR = Path(__file__).resolve().parent.parent / "evaluation_results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+from server.agent.llm_client import get_llm_client, BaseLLMClient
+
+
 def run_single_evaluation(
     scenario: Scenario,
     provider: Optional[str] = None,
+    llm_client: Optional[BaseLLMClient] = None,
 ) -> ScenarioEvaluationResult:
     """
     Runs the agent through a single scenario and deterministically grades it.
     """
+    client = llm_client or get_llm_client(provider)
     sandbox = TelemetrySandbox(scenario)
-    recorder = TraceRecorder(scenario)
-    llm_client = get_llm_client(provider)
-    agent = IncidentResponseAgent(scenario=scenario, sandbox=sandbox, llm_client=llm_client)
+    recorder = TraceRecorder(
+        scenario,
+        provider=getattr(client, "provider_name", provider or "mock"),
+        model_name=getattr(client, "model", getattr(client, "model_name", None)),
+    )
+    agent = IncidentResponseAgent(scenario=scenario, sandbox=sandbox, llm_client=client)
 
     def on_step(step):
         recorder.record_step(step.model_dump())
@@ -62,6 +70,8 @@ def run_batch_evaluation(
     print(f"Scenarios: {len(scenarios)} | Provider: {provider or 'default/mock'}")
     print(f"==========================================================================\n")
 
+    shared_client = get_llm_client(provider)
+    model_name = getattr(shared_client, "model", getattr(shared_client, "model_name", None))
     results: List[ScenarioEvaluationResult] = []
     total_score = 0.0
     total_recall = 0.0
@@ -72,7 +82,7 @@ def run_batch_evaluation(
 
     for idx, sc in enumerate(scenarios, start=1):
         print(f"[{idx:02d}/{len(scenarios):02d}] Evaluating: {sc.id} ({sc.category})... ", end="", flush=True)
-        res = run_single_evaluation(sc, provider=provider)
+        res = run_single_evaluation(sc, provider=provider, llm_client=shared_client)
         results.append(res)
 
         total_score += res.overall_score
@@ -93,6 +103,7 @@ def run_batch_evaluation(
     summary = BatchEvaluationSummary(
         timestamp=datetime.now(timezone.utc).isoformat(),
         provider=provider or "mock",
+        model_name=model_name,
         total_scenarios=len(scenarios),
         passed_scenarios=passed_count,
         failed_scenarios=len(scenarios) - passed_count,
@@ -105,14 +116,16 @@ def run_batch_evaluation(
         results=results,
     )
 
-    # Save JSON summary
-    json_path = RESULTS_DIR / "latest_run.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        f.write(summary.model_dump_json(indent=2))
 
-    # Generate Markdown Report
-    md_path = RESULTS_DIR / "latest_report.md"
-    generate_markdown_report(summary, md_path)
+    # Save JSON summary if running batch suite
+    if len(scenarios) > 1:
+        json_path = RESULTS_DIR / "latest_run.json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            f.write(summary.model_dump_json(indent=2))
+
+        # Generate Markdown Report
+        md_path = RESULTS_DIR / "latest_report.md"
+        generate_markdown_report(summary, md_path)
 
     # Print formatted scorecard table
     print_scorecard_table(summary)
@@ -167,7 +180,7 @@ def main():
     parser = argparse.ArgumentParser(description="Deterministic Evaluation Harness Runner")
     parser.add_argument("--all", action="store_true", help="Run evaluation on all 18 scenarios")
     parser.add_argument("--scenario", type=str, help="Run evaluation on a specific scenario ID")
-    parser.add_argument("--provider", type=str, default="mock", choices=["mock", "gemini", "openai", "ollama"], help="LLM Provider")
+    parser.add_argument("--provider", type=str, default="mock", choices=["mock", "gemini", "groq", "openai", "ollama"], help="LLM Provider")
 
     args = parser.parse_args()
 

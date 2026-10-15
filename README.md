@@ -62,7 +62,7 @@ AiProject/
 │   ├── agent/                         # Layer 3: Target Agent
 │   │   ├── models.py                  # Step, report, and execution models
 │   │   ├── prompts.py                 # SRE persona & safety guardrails
-│   │   ├── llm_client.py              # Multi-provider adapter (Gemini, OpenAI, Mock)
+│   │   ├── llm_client.py              # Multi-provider adapter (Groq, Gemini, OpenAI, Mock)
 │   │   └── agent.py                   # Autonomous ReAct investigation loop
 │   ├── routes_scenarios.py            # Layer 5: Backend REST API
 │   ├── routes_agent.py                # Triage execution & SSE streaming
@@ -82,10 +82,12 @@ AiProject/
 │   ├── generate_sft_data.py           # Alpaca/ShareGPT dataset generator (80/20 split)
 │   ├── train_lora.py                  # LoRA/QLoRA PEFT training script
 │   └── benchmark_comparison.py        # Base vs Fine-Tuned comparative analysis
-├── tests/                             # Automated Test Suite (17 Unit & Integration Tests)
+├── tests/                             # Automated Test Suite (43 Unit & Integration Tests)
 │   ├── test_scenarios.py
 │   ├── test_tools.py
 │   ├── test_agent.py
+│   ├── test_groq_provider.py          # Groq SDK, multi-turn tool calling, error handling
+│   ├── test_provider_routing.py       # Engine factory & Gemini tool calling
 │   ├── test_scorer.py
 │   └── test_api.py
 ├── evaluation_results/                # Test outputs, JSON scorecards & Markdown reports
@@ -106,12 +108,16 @@ python -m pip install -r requirements.txt
 ```bash
 python -m pytest -v
 ```
-All 17 tests validate schema models, sandbox tools, agent reasoning, deterministic scoring, safety enforcement, and REST endpoints.
+All 43 tests validate schema models, sandbox tools, agent reasoning, Groq and Gemini tool calling, provider routing, deterministic scoring, safety enforcement, and REST endpoints.
 
 ### 3. Run Deterministic Evaluation Harness (CLI)
-Evaluate all 18 scenarios black-box:
+Evaluate all 18 scenarios black-box with the deterministic Mock reasoner:
 ```bash
 python -m evaluation.run_eval --all
+```
+Or evaluate using the Groq API provider:
+```bash
+python -m evaluation.run_eval --all --provider groq
 ```
 Outputs an auditable ASCII scorecard in the terminal, saves JSON traces to `evaluation_results/traces/`, and updates `evaluation_results/latest_report.md`.
 
@@ -121,7 +127,7 @@ Start the FastAPI server:
 python -m server.main
 ```
 Navigate to **`http://127.0.0.1:8000`** in your browser to access:
-- **Incident Triage Simulator**: Select any of the 18 scenarios and watch the agent autonomously investigate telemetry in real time.
+- **Incident Triage Simulator**: Select any of the 18 scenarios, choose an engine (**Mock SRE Reasoner**, **Groq API**, or **Google Gemini API**), and watch the agent autonomously investigate telemetry in real time.
 - **Evaluation & Regression Dashboard**: Run batch tests, inspect aggregate KPIs, and drill down into individual JSON execution traces.
 - **Scenario Bank Explorer**: Inspect synthetic logs, metrics, deployment history, and hidden ground-truth criteria.
 
@@ -177,13 +183,32 @@ Rather than relying on noisy, expensive LLM-as-a-judge grading, the harness calc
 
 ## Configuration & Environment Variables
 
-Create an optional `.env` file in the project root:
+Create a `.env` file in the project root:
 ```ini
 HOST=127.0.0.1
 PORT=8000
 DEFAULT_PROVIDER=mock
+
+# Groq API Configuration (Official groq SDK)
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile  # Supported: llama-3.3-70b-versatile, llama-3.1-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768, qwen-2.5-32b
+
+# Google Gemini API Configuration (Official google-genai SDK)
 GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-3.6-flash   # Supported: gemini-3.6-flash, gemini-3.8-flash, gemini-flash-lite-latest
+
+# OpenAI / Local LLM (Future implementation)
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_BASE_URL=https://api.openai.com/v1
 ```
-If no API keys are provided, the system seamlessly runs in **Mock SRE Reasoner mode**, providing 100% deterministic, offline evaluation at zero cost.
+
+### Multi-Engine Execution Modes
+1. **Mock SRE Reasoner (Deterministic)**: The zero-cost, 100% offline baseline engine. Uses authentic SRE investigative trajectories across all 18 scenarios for deterministic regression testing.
+2. **Groq API (Ultra-Low Latency Inference)**: Real autonomous function calling via the official `groq` SDK.
+   - **Supported Models**: `llama-3.3-70b-versatile` (default recommended), `llama-3.1-70b-versatile`, `llama-3.1-8b-instant`, `mixtral-8x7b-32768`, `qwen-2.5-32b`.
+   - **Multi-Turn Tool Calling**: Groq autonomously selects tools, receives sandbox outputs, reasons across turns, and generates structured `DiagnosticReport` schemas.
+   - **No Silent Fallback**: If Groq fails (e.g., HTTP 401 invalid API key, HTTP 429 rate limit, or model decommissioned), an explicit error is surfaced to the UI and API rather than being masked.
+   - **Safety Boundary**: Groq can only invoke registered read-only diagnostic tools. Remediation instructions remain strictly advisory for human SRE approval.
+3. **Google Gemini API**: Real autonomous function calling via the official `google-genai` SDK. Gemini inspects alerts, autonomously decides which diagnostic tools to invoke (`fetch_logs`, `fetch_deployment_history`, `fetch_metrics`, `inspect_service_config`), receives sandbox outputs, and synthesizes structured JSON post-mortem diagnostic reports.
+   - **No Silent Fallback**: If Gemini fails or keys are missing, clear error messages are surfaced rather than masked.
+   - **Engine Attribution**: Both the Web HUD and JSON traces clearly record the engine and active model (`gemini-3.6-flash` or `llama-3.3-70b-versatile`).

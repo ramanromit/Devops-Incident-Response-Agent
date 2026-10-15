@@ -29,8 +29,11 @@ class DiagnosticReport(BaseModel):
 class AgentExecutionResult(BaseModel):
     scenario_id: str
     success: bool
+    provider: Optional[str] = "mock"
+    model_name: Optional[str] = None
     steps: List[AgentStep] = Field(default_factory=list)
     report: Optional[DiagnosticReport] = None
     total_steps: int = 0
     duration_seconds: float = 0.0
     error: Optional[str] = None
+

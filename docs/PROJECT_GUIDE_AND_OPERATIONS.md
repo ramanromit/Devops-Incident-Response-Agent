@@ -83,7 +83,8 @@ You are now inside the **DevOps Incident-Response Control Center**.
 #### 3. Engine Dropdown Selector (Top Right)
 Allows you to switch the brain powering the agent:
 - **Mock SRE Reasoner (Deterministic)** *(Default)*: Runs an intelligent, reproducible reasoning engine. Needs **zero API keys**, costs **$0.00**, works completely offline, and responds in milliseconds.
-- **Google Gemini API**: Routes reasoning through Google Gemini (`gemini-2.0-flash` / `gemini-1.5-pro`) using your `GEMINI_API_KEY`.
+- **Groq API — Configured Groq Model**: Routes ultra-fast reasoning through the official Groq API (`llama-3.3-70b-versatile`) with native multi-turn tool calling using `GROQ_API_KEY`.
+- **Google Gemini API**: Routes reasoning through Google Gemini (`gemini-flash-lite-latest` / `gemini-3.6-flash`) using your `GEMINI_API_KEY`.
 - **OpenAI / Local LLM**: Routes reasoning through OpenAI (`gpt-4o`) or local Ollama/vLLM endpoints.
 
 #### 4. System Status Indicator (Top Right)
@@ -252,17 +253,21 @@ In addition to the Web Dashboard, all components can be run directly from the co
 ```powershell
 python -m pytest -v
 ```
-*Executes all 17 automated tests verifying models, sandbox tools, ReAct reasoning, safety rules, and REST endpoints.*
+*Executes all 43 automated tests verifying models, sandbox tools, Groq/Gemini tool calling, ReAct reasoning, safety rules, and REST endpoints.*
 
 ### 2. Run the Deterministic Evaluation Harness in Terminal
 ```powershell
+# Evaluate with default Mock SRE Reasoner
 python -m evaluation.run_eval --all
+
+# Evaluate with Groq API
+python -m evaluation.run_eval --all --provider groq
 ```
 *Runs all 18 scenarios in the terminal, displays a formatted ASCII scorecard table, saves JSON traces to `evaluation_results/traces/`, and updates `evaluation_results/latest_report.md`.*
 
 To evaluate a single scenario:
 ```powershell
-python -m evaluation.run_eval --scenario scenario_01_bad_deployment
+python -m evaluation.run_eval --scenario scenario_01_bad_deployment --provider groq
 ```
 
 ### 3. Run the SRE Fine-Tuning Pipeline
@@ -287,8 +292,20 @@ python -m evaluation.run_eval --scenario scenario_01_bad_deployment
 ### Q: Why didn't the buttons respond when I opened the page earlier?
 **A**: When the frontend was initially served, asset paths (`/app.js` and `/index.css`) were routed only under `/static`. This was updated in `server/main.py` so that both the root `/` and `/static/` endpoints cleanly serve `app.js` and `index.css`. Simply refresh your browser at `http://127.0.0.1:8000`.
 
-### Q: Do I need to buy API keys or pay for OpenAI/Gemini to use this?
-**A**: **No!** By default, the system uses the **Mock SRE Reasoner**, which simulates authentic SRE investigative trajectories for all 18 scenarios deterministically. It runs 100% locally, with zero cost, zero latency, and zero internet dependency. If you do wish to use Gemini or OpenAI, simply add your keys to `.env` and select the engine from the dropdown.
+### Q: Do I need to buy API keys or pay for OpenAI/Gemini/Groq to use this?
+**A**: **No!** By default, the system uses the **Mock SRE Reasoner**, which simulates authentic SRE investigative trajectories for all 18 scenarios deterministically. It runs 100% locally, with zero cost, zero latency, and zero internet dependency. If you wish to use Groq or Gemini, simply add your keys to `.env` and select the engine from the dropdown.
+
+### Q: How do I configure and use Groq API?
+**A**: Add the following to your `.env` file:
+```ini
+GROQ_API_KEY=gsk_your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+```
+Supported models: `llama-3.3-70b-versatile`, `llama-3.1-70b-versatile`, `llama-3.1-8b-instant`, `mixtral-8x7b-32768`, `qwen-2.5-32b`.
+Then select **Groq API — Configured Groq Model** from the Engine dropdown on the dashboard, or pass `--provider groq` to the CLI runner.
+
+### Q: What happens if Groq API encounters an error?
+**A**: Unlike basic wrappers that silently mask failures, this system enforces **No Silent Fallback**. If your API key is invalid (401), rate limits are exceeded (429), or a model is decommissioned, the system surfaces a clear, actionable error banner in the UI and an HTTP 400/502 in the API.
 
 ### Q: How is this deterministic if LLMs are non-deterministic?
 **A**: The **Evaluation Harness** is deterministic because it treats the LLM as a black box and evaluates its tool calls, argument constraints, and diagnoses against fixed ground-truth rules and thresholds, generating mathematical scores rather than subjective grading.

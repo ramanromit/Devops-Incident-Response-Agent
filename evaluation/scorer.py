@@ -256,6 +256,8 @@ class DeterministicScorer:
             scenario_id=scenario.id,
             scenario_title=scenario.title,
             category=scenario.category,
+            provider=getattr(execution_result, "provider", None) or "mock",
+            model_name=getattr(execution_result, "model_name", None),
             passed=passed,
             overall_score=overall_score,
             pass_threshold=cls.PASS_THRESHOLD,
@@ -268,3 +270,4 @@ class DeterministicScorer:
             trace_path=trace_path,
             failure_reasons=failure_reasons,
         )
+

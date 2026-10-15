@@ -45,6 +45,8 @@ class ScenarioEvaluationResult(BaseModel):
     scenario_id: str
     scenario_title: str
     category: str
+    provider: Optional[str] = "mock"
+    model_name: Optional[str] = None
     passed: bool
     overall_score: float  # 0.0 - 100.0%
     pass_threshold: float = 75.0
@@ -61,6 +63,7 @@ class ScenarioEvaluationResult(BaseModel):
 class BatchEvaluationSummary(BaseModel):
     timestamp: str
     provider: str
+    model_name: Optional[str] = None
     total_scenarios: int
     passed_scenarios: int
     failed_scenarios: int
@@ -71,3 +74,4 @@ class BatchEvaluationSummary(BaseModel):
     average_steps: float
     average_duration_seconds: float
     results: List[ScenarioEvaluationResult] = Field(default_factory=list)
+

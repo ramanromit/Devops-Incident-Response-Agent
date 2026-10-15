@@ -41,6 +41,9 @@ def test_agent_triage_endpoint():
     assert result["success"] is True
     assert result["report"] is not None
     assert result["report"]["root_cause_category"] == "bad_deployment"
+    assert "evaluation" in result
+    assert result["evaluation"]["passed"] is True
+    assert result["evaluation"]["overall_score"] >= 75.0
 
 
 def test_evaluation_latest_endpoint():
