@@ -138,3 +138,24 @@ class TelemetrySandbox:
         }
         self.log_call("inspect_service_config", {"service": service}, result)
         return result
+
+    def check_service_health(
+        self,
+        service: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Inspects application and dependency health status based on scenario alert.
+        """
+        alert = self.scenario.alert
+        status = "unhealthy" if alert.severity in ("CRITICAL", "HIGH") else "degraded"
+        result = {
+            "status": "success",
+            "service": service or alert.service,
+            "health_status": status,
+            "alert_metric": alert.metric,
+            "current_value": alert.current_value,
+            "threshold": alert.threshold,
+            "message": alert.message,
+        }
+        self.log_call("check_service_health", {"service": service}, result)
+        return result

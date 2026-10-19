@@ -197,6 +197,9 @@ function clearInvestigationFeed() {
 }
 
 // Event Listeners
+let currentInvestigationMode = "scenario"; // "scenario" | "live"
+let liveTargetHealthData = null;
+
 function setupEventListeners() {
   const runBtn = document.getElementById("runTriageBtn");
   runBtn.addEventListener("click", runAgentTriage);
@@ -225,11 +228,164 @@ function setupEventListeners() {
   closeModalBtn.addEventListener("click", () => {
     document.getElementById("traceModal").style.display = "none";
   });
+
+  // Mode Switcher Listeners
+  const modeScenarioBtn = document.getElementById("modeScenarioBtn");
+  if (modeScenarioBtn) {
+    modeScenarioBtn.addEventListener("click", () => setInvestigationMode("scenario"));
+  }
+  const modeLiveBtn = document.getElementById("modeLiveBtn");
+  if (modeLiveBtn) {
+    modeLiveBtn.addEventListener("click", () => setInvestigationMode("live"));
+  }
+
+  // Live Target Controls
+  const refreshLiveBtn = document.getElementById("refreshLiveHealthBtn");
+  if (refreshLiveBtn) {
+    refreshLiveBtn.addEventListener("click", checkLiveTargetHealth);
+  }
 }
 
-// Run Agent Triage
+// Switch between Scenario Bank Mode and Live Target Mode
+function setInvestigationMode(mode) {
+  currentInvestigationMode = mode;
+  const scenarioBtn = document.getElementById("modeScenarioBtn");
+  const liveBtn = document.getElementById("modeLiveBtn");
+  const scenarioContainer = document.getElementById("scenarioModeContainer");
+  const liveContainer = document.getElementById("liveModeContainer");
+  const evalBtn = document.getElementById("evaluateScenarioBtn");
+  const runBtn = document.getElementById("runTriageBtn");
+  const modeHeaderBadge = document.getElementById("modeHeaderBadge");
+
+  if (mode === "live") {
+    if (scenarioBtn) scenarioBtn.classList.remove("active");
+    if (liveBtn) liveBtn.classList.add("active");
+    if (scenarioContainer) scenarioContainer.style.display = "none";
+    if (liveContainer) liveContainer.style.display = "block";
+    if (evalBtn) evalBtn.style.display = "none";
+    if (modeHeaderBadge) {
+      modeHeaderBadge.textContent = "Live Telemetry Target";
+      modeHeaderBadge.className = "badge badge-accent";
+    }
+    if (runBtn) {
+      runBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        Launch Live Incident Investigation
+      `;
+    }
+    checkLiveTargetHealth();
+  } else {
+    if (liveBtn) liveBtn.classList.remove("active");
+    if (scenarioBtn) scenarioBtn.classList.add("active");
+    if (liveContainer) liveContainer.style.display = "none";
+    if (scenarioContainer) scenarioContainer.style.display = "block";
+    if (evalBtn) evalBtn.style.display = "block";
+    if (modeHeaderBadge) {
+      modeHeaderBadge.textContent = "Scenario Simulation";
+      modeHeaderBadge.className = "badge badge-outline";
+    }
+    if (runBtn) {
+      runBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        Launch Autonomous Agent Triage
+      `;
+    }
+  }
+}
+
+// Probes the running OrderFlow application health via the Agent backend adapter
+async function checkLiveTargetHealth() {
+  const badge = document.getElementById("liveTargetHealthBadge");
+  const probeVal = document.getElementById("liveHealthProbeVal");
+  const releaseEl = document.getElementById("liveTargetReleaseText");
+  const urlEl = document.getElementById("liveTargetUrlText");
+  const checkedEl = document.getElementById("liveCheckedTime");
+
+  if (badge) badge.textContent = "Probing...";
+
+  try {
+    const res = await fetch(`${API_BASE}/api/agent/live-target/status`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    liveTargetHealthData = data;
+
+    if (data.target_url && urlEl) {
+      urlEl.textContent = data.target_url;
+    }
+
+    if (data.connected && data.health) {
+      const h = data.health;
+      const status = (h.health_status || "unknown").toLowerCase();
+      if (releaseEl && h.release_version) {
+        releaseEl.textContent = h.release_version;
+      }
+
+      if (badge) {
+        if (status === "healthy") {
+          badge.textContent = "Healthy (200 OK)";
+          badge.className = "badge badge-accent";
+          badge.style.background = "rgba(16, 185, 129, 0.2)";
+          badge.style.color = "#34d399";
+        } else if (status === "degraded") {
+          badge.textContent = "Degraded (503)";
+          badge.className = "badge badge-accent";
+          badge.style.background = "rgba(245, 158, 11, 0.25)";
+          badge.style.color = "#fbbf24";
+        } else {
+          badge.textContent = `${status.toUpperCase()} (Alert)`;
+          badge.className = "badge badge-accent";
+          badge.style.background = "rgba(239, 68, 68, 0.25)";
+          badge.style.color = "#f87171";
+        }
+      }
+
+      if (probeVal) {
+        const dbConnected = h.dependencies && h.dependencies.database ? h.dependencies.database.connected : null;
+        if (dbConnected === false) {
+          probeVal.textContent = "DB: Disconnected (Fault Active)";
+          probeVal.style.color = "#f87171";
+        } else if (status === "degraded" || status === "unhealthy") {
+          probeVal.textContent = "Subsystem Probes Degraded";
+          probeVal.style.color = "#fbbf24";
+        } else {
+          probeVal.textContent = "All Probes Nominal (200 OK)";
+          probeVal.style.color = "#34d399";
+        }
+      }
+    } else {
+      if (badge) {
+        badge.textContent = "Unreachable (Port 8080)";
+        badge.style.background = "rgba(239, 68, 68, 0.25)";
+        badge.style.color = "#f87171";
+      }
+      if (probeVal) {
+        probeVal.textContent = "Cannot reach OrderFlow backend";
+        probeVal.style.color = "#f87171";
+      }
+    }
+
+    if (checkedEl) {
+      checkedEl.textContent = `Last checked: ${new Date().toLocaleTimeString()}`;
+    }
+  } catch (err) {
+    console.warn("Live health probe error:", err);
+    if (badge) {
+      badge.textContent = "Target Unreachable";
+      badge.style.background = "rgba(239, 68, 68, 0.25)";
+      badge.style.color = "#f87171";
+    }
+  }
+}
+
+
+// Run Agent Triage (Scenario Mode or Live Mode)
 async function runAgentTriage() {
-  if (!activeScenario) return;
+  const isLive = currentInvestigationMode === "live";
+  if (!isLive && !activeScenario) return;
 
   const runBtn = document.getElementById("runTriageBtn");
   const provider = document.getElementById("providerSelect").value;
@@ -239,7 +395,7 @@ async function runAgentTriage() {
   const providerLabel = getProviderLabel(provider);
 
   runBtn.disabled = true;
-  runBtn.innerHTML = `<span class="pulse-dot"></span> ${providerLabel} Reasoning in Progress...`;
+  runBtn.innerHTML = `<span class="pulse-dot"></span> ${providerLabel} ${isLive ? 'Investigating Live Target...' : 'Reasoning in Progress...'}`;
 
   feed.innerHTML = "";
   document.getElementById("finalReportCard").style.display = "none";
@@ -247,23 +403,24 @@ async function runAgentTriage() {
   if (evalCard) evalCard.style.display = "none";
   document.getElementById("executionMeta").style.display = "flex";
   if (providerBadge) {
-    providerBadge.textContent = `Engine: ${providerLabel}`;
+    providerBadge.textContent = `Engine: ${providerLabel}${isLive ? ' [LIVE TARGET]' : ''}`;
     providerBadge.className = (provider.startsWith("gemini") || provider.startsWith("groq")) ? "badge badge-accent" : "badge badge-outline";
   }
-  document.getElementById("stepCounterBadge").textContent = "Investigating...";
+  document.getElementById("stepCounterBadge").textContent = isLive ? "Querying Live Telemetry..." : "Investigating...";
   document.getElementById("durationBadge").textContent = "Timing...";
 
   const stopThinking = showThinkingIndicator(providerLabel);
 
   try {
-    const res = await fetch(`${API_BASE}/api/agent/triage`, {
+    const endpoint = isLive ? `${API_BASE}/api/agent/live-triage` : `${API_BASE}/api/agent/triage`;
+    const payload = isLive
+      ? { provider: provider, max_steps: 8 }
+      : { scenario_id: activeScenario.id, provider: provider, max_steps: 8 };
+
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        scenario_id: activeScenario.id,
-        provider: provider,
-        max_steps: 8,
-      }),
+      body: JSON.stringify(payload),
     });
 
     stopThinking();
@@ -280,12 +437,13 @@ async function runAgentTriage() {
 
     if (providerBadge) {
       const activeModel = result.model_name ? ` (${result.model_name})` : "";
-      providerBadge.textContent = `Engine: ${result.provider || provider}${activeModel}`;
+      const targetLabel = result.is_live ? " [LIVE TARGET]" : "";
+      providerBadge.textContent = `Engine: ${result.provider || provider}${activeModel}${targetLabel}`;
     }
 
     await renderAgentTimeline(result.steps, result.provider, result.model_name, true);
     renderFinalReport(result.report);
-    if (result.evaluation) {
+    if (result.evaluation && !isLive) {
       renderIncidentEvaluation(result.evaluation, result.provider, result.model_name);
     }
 
@@ -313,7 +471,7 @@ async function runAgentTriage() {
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polygon points="5 3 19 12 5 21 5 3"></polygon>
       </svg>
-      Launch Autonomous Agent Triage
+      ${isLive ? "Launch Live Incident Investigation" : "Launch Autonomous Agent Triage"}
     `;
   }
 }

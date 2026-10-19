@@ -68,27 +68,99 @@
           <div class="card glass-card">
             <div class="card-header">
               <h2 class="card-title">Trigger Incident Alert</h2>
-              <span class="badge badge-accent">Live Simulation</span>
+              <span class="badge badge-accent" id="modeHeaderBadge">Live Simulation</span>
             </div>
 
-            <div class="form-group">
-              <label for="scenarioSelect" class="form-label">Select Incident Scenario:</label>
-              <select id="scenarioSelect" class="select-input full-width">
-                <!-- Dynamically populated -->
-              </select>
+            <!-- Mode Switcher: Scenario Bank vs Live Target -->
+            <div class="mode-switcher-container">
+              <label class="form-label" style="margin-bottom: 6px;">Investigation Mode:</label>
+              <div class="mode-toggle-group">
+                <button type="button" class="mode-toggle-btn active" id="modeScenarioBtn">
+                  <span>📁 Scenario Bank (18)</span>
+                </button>
+                <button type="button" class="mode-toggle-btn" id="modeLiveBtn">
+                  <span class="live-dot-pulse"></span>
+                  <span>Live Target (OrderFlow)</span>
+                </button>
+              </div>
             </div>
 
-            <div id="activeAlertCard" class="alert-box alert-critical">
-              <div class="alert-header">
-                <span class="severity-pill" id="alertSeverityPill">CRITICAL</span>
-                <span class="alert-service" id="alertServiceTag">checkout-service</span>
+            <!-- Scenario Mode Container -->
+            <div id="scenarioModeContainer">
+              <div class="form-group" style="margin-top: 12px;">
+                <label for="scenarioSelect" class="form-label">Select Incident Scenario:</label>
+                <select id="scenarioSelect" class="select-input full-width">
+                  <!-- Dynamically populated -->
+                </select>
               </div>
-              <div class="alert-metric-row">
-                <span class="metric-name" id="alertMetricName">Metric: http_5xx_rate</span>
-                <span class="metric-val" id="alertMetricVal">34.8% (Threshold: &gt;2%)</span>
+
+              <div id="activeAlertCard" class="alert-box alert-critical">
+                <div class="alert-header">
+                  <span class="severity-pill" id="alertSeverityPill">CRITICAL</span>
+                  <span class="alert-service" id="alertServiceTag">checkout-service</span>
+                </div>
+                <div class="alert-metric-row">
+                  <span class="metric-name" id="alertMetricName">Metric: http_5xx_rate</span>
+                  <span class="metric-val" id="alertMetricVal">34.8% (Threshold: &gt;2%)</span>
+                </div>
+                <p class="alert-desc" id="alertMessageText">Checkout service error rate spiked to 34.8% following deployment.</p>
+                <div class="alert-time" id="alertTimestampText">Triggered: 2026-09-10T14:32:00Z</div>
               </div>
-              <p class="alert-desc" id="alertMessageText">Checkout service error rate spiked to 34.8% following deployment.</p>
-              <div class="alert-time" id="alertTimestampText">Triggered: 2026-09-10T14:32:00Z</div>
+            </div>
+
+            <!-- Live Mode Container -->
+            <div id="liveModeContainer" style="display: none; margin-top: 12px;">
+              <div class="live-target-status-box" id="liveTargetStatusBox">
+                <div class="live-target-header">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="live-pulse-ring"></span>
+                    <strong style="color: var(--text-primary); font-size: 0.88rem;">OrderFlow Target App</strong>
+                  </div>
+                  <span class="badge badge-accent" id="liveTargetHealthBadge">Connecting...</span>
+                </div>
+                <div class="live-target-details">
+                  <div class="detail-row">
+                    <span>Target URL:</span>
+                    <code id="liveTargetUrlText">http://127.0.0.1:8080</code>
+                  </div>
+                  <div class="detail-row">
+                    <span>Release:</span>
+                    <span id="liveTargetReleaseText">v2.4.0</span>
+                  </div>
+                  <div class="detail-row">
+                    <span>OrderFlow UI:</span>
+                    <a href="http://localhost:3000" target="_blank" style="color: var(--accent-cyan); text-decoration: underline; font-size: 0.78rem;">Open Dashboard (localhost:3000) ↗</a>
+                  </div>
+                </div>
+              </div>
+
+              <div class="alert-box alert-warning" id="liveAlertBox" style="margin-top: 10px; margin-bottom: 12px;">
+                <div class="alert-header">
+                  <span class="severity-pill" style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">LIVE TELEMETRY</span>
+                  <span class="alert-service">OrderFlow Core Service</span>
+                </div>
+                <div class="alert-metric-row">
+                  <span class="metric-name">Mode: Real Diagnostic APIs</span>
+                  <span class="metric-val" id="liveHealthProbeVal">Live Telemetry Active</span>
+                </div>
+                <p class="alert-desc" id="liveAlertMessage">Agent will autonomously query OrderFlow's live health probes, logs, metrics, deployments, and configs to isolate the root cause.</p>
+                <div class="alert-time" id="liveCheckedTime">Last checked: Just now</div>
+              </div>
+
+              <!-- Status Verification from Demo Project -->
+              <div class="live-status-action-card" style="margin-bottom: 12px;">
+                <button type="button" class="btn btn-outline full-width" id="refreshLiveHealthBtn" title="Query real-time health and telemetry status from OrderFlow" style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6"></path>
+                    <path d="M1 20v-6h6"></path>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                  </svg>
+                  Check Status from Demo Project
+                </button>
+                <div class="status-action-hint" style="font-size: 0.74rem; color: var(--text-secondary); line-height: 1.4; margin-top: 8px; padding: 6px 8px; background: rgba(0, 0, 0, 0.25); border-radius: 4px; border-left: 2px solid var(--accent-cyan);">
+                  Faults are injected exclusively from the OrderFlow Demo Dashboard at <a href="http://localhost:3000" target="_blank" style="color: var(--accent-cyan); text-decoration: underline;">localhost:3000 ↗</a>. Use the button above to check status, then launch the investigation below to diagnose and view the solution.
+                </div>
+              </div>
             </div>
 
             <div class="action-buttons" style="display: flex; flex-direction: column; gap: 10px;">

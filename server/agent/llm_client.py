@@ -72,6 +72,52 @@ class MockSRELLMClient(BaseLLMClient):
         available_tools: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
 
+        is_live = scenario.id.startswith("live_") or getattr(scenario, "category", "") == "live_target_application"
+
+        if is_live:
+            live_tool_order = [
+                "check_service_health",
+                "fetch_logs",
+                "fetch_metrics",
+                "fetch_deployment_history",
+                "inspect_service_config",
+            ]
+            called_tools = [s.get("tool_name") for s in step_history if s.get("tool_name")]
+            uncalled = [t for t in live_tool_order if t not in called_tools]
+            if uncalled:
+                next_tool = uncalled[0]
+                service_target = scenario.alert.service or "OrderFlow Demo Service"
+                if next_tool == "check_service_health":
+                    thought = f"Live investigation initiated for '{service_target}'. Querying live health probes and dependency readiness to assess subsystem availability."
+                    args = {"service": service_target}
+                elif next_tool == "fetch_logs":
+                    thought = f"Inspecting application and HTTP server error logs from '{service_target}' to capture recent exceptions and stack traces."
+                    args = {"service": service_target, "log_level": "ERROR", "limit": 25}
+                elif next_tool == "fetch_metrics":
+                    thought = f"Querying real-time traffic volume, HTTP 5xx error counts, and latency percentiles (p50/p95/max) for '{service_target}'."
+                    args = {"service": service_target}
+                elif next_tool == "fetch_deployment_history":
+                    thought = f"Auditing recent release deployments and configuration change history for '{service_target}' to correlate with the incident."
+                    args = {"service": service_target, "limit": 5}
+                elif next_tool == "inspect_service_config":
+                    thought = f"Inspecting sanitized runtime configuration parameters, database connection pool settings, and downstream endpoint URLs."
+                    args = {"service": service_target}
+                else:
+                    thought = f"Executing diagnostic tool '{next_tool}' on '{service_target}'."
+                    args = {"service": service_target}
+
+                return {
+                    "action": "call_tool",
+                    "thought": thought,
+                    "tool_name": next_tool,
+                    "tool_arguments": args,
+                }
+
+            return {
+                "action": "finish",
+                "thought": "Telemetry gathered across live health checks, error logs, metrics, deployment changes, and configuration. Evidence compiled. Synthesizing live diagnostic report.",
+            }
+
         gt = scenario.ground_truth
         required_tools = gt.required_tools
         called_tools = [s.get("tool_name") for s in step_history if s.get("tool_name")]
@@ -130,6 +176,9 @@ class MockSRELLMClient(BaseLLMClient):
         scenario: Scenario,
         step_history: List[Dict[str, Any]],
     ) -> DiagnosticReport:
+        if scenario.id.startswith("live_") or getattr(scenario, "category", "") == "live_target_application":
+            return self._generate_live_report(scenario, step_history)
+
         gt = scenario.ground_truth
         evidence = []
         for step in step_history:
@@ -165,6 +214,170 @@ class MockSRELLMClient(BaseLLMClient):
                 "Enhance telemetry alerts and early regression monitors",
                 "Conduct blameless post-mortem and update SRE runbooks"
             ],
+            safety_boundary_compliance=True,
+        )
+
+    def _generate_live_report(
+        self,
+        scenario: Scenario,
+        step_history: List[Dict[str, Any]],
+    ) -> DiagnosticReport:
+        evidence = []
+        has_db_error = False
+        db_is_healthy = False
+        db_err_snippet = ""
+        has_high_latency = False
+        latency_val = 0.0
+        has_bad_release = False
+        release_ver = ""
+        pg_bad_url = ""
+
+        for step in step_history:
+            tool = step.get("tool_name")
+            output = step.get("tool_output", {}) or {}
+
+            if tool == "check_service_health":
+                health_st = output.get("health_status", "unknown")
+                deps = output.get("dependencies", {})
+                db_dep = deps.get("database", {})
+                pg_dep = deps.get("downstream_services", {}).get("payment_gateway", {})
+                evidence.append(f"**Health Check**: Overall status '{health_st}'. Database connected: {db_dep.get('connected')}. Payment gateway status: '{pg_dep.get('status')}'.")
+                if db_dep.get("status") == "healthy" and db_dep.get("connected") is True:
+                    db_is_healthy = True
+                elif db_dep.get("status") == "unhealthy" or db_dep.get("connected") is False or db_dep.get("error"):
+                    has_db_error = True
+                    db_err_snippet = db_dep.get("error", "database connection failed")
+                if pg_dep.get("status") == "degraded" or pg_dep.get("issues"):
+                    has_bad_release = True
+
+            elif tool == "fetch_logs":
+                logs = output.get("logs", [])
+                err_logs = [l for l in logs if l.get("level") in ("ERROR", "FATAL", "CRITICAL", "WARN")]
+                if err_logs:
+                    msg = err_logs[0].get("message", "")
+                    evidence.append(f"**Application Error Logs**: {msg[:160]}")
+                    for l in err_logs:
+                        m_low = (l.get("message", "") + " " + (l.get("error_type") or "")).lower()
+                        if "database" in m_low or "sqlite" in m_low or "connection" in m_low:
+                            if not db_is_healthy:
+                                has_db_error = True
+                            if not db_err_snippet:
+                                db_err_snippet = l.get("message", "")[:120]
+                        if "latency" in m_low or "timeout" in m_low:
+                            has_high_latency = True
+                else:
+                    evidence.append("**Application Error Logs**: No error-level entries recorded in recent log window.")
+
+            elif tool == "fetch_metrics":
+                m = output.get("metrics", {})
+                lat = m.get("latency_ms", {})
+                traffic = m.get("traffic", {})
+                endpoints = m.get("endpoints", {})
+                evidence.append(f"**Telemetry Metrics**: 5xx Server Errors: {traffic.get('server_errors_5xx', 0)}, p95 Latency: {lat.get('p95', 0)}ms, Avg Latency: {lat.get('avg', 0)}ms.")
+
+                if lat.get("p95", 0) >= 500 or lat.get("avg", 0) >= 300 or lat.get("max", 0) >= 1000:
+                    has_high_latency = True
+                    latency_val = max(latency_val, lat.get("avg", lat.get("p95", 0)))
+
+                for ep_name, ep_stats in endpoints.items():
+                    if ep_stats.get("avg_latency_ms", 0) >= 300 or ep_stats.get("max_latency_ms", 0) >= 1000:
+                        has_high_latency = True
+                        latency_val = max(latency_val, ep_stats.get("avg_latency_ms", 0), ep_stats.get("max_latency_ms", 0))
+
+            elif tool == "fetch_deployment_history":
+                deploys = output.get("deployments", [])
+                active_rel = output.get("active_release", "")
+                if deploys:
+                    top = deploys[0]
+                    evidence.append(f"**Deployment History**: Active release {top.get('version')} deployed at {top.get('deployed_at')} by {top.get('author')} ({top.get('commit_message')}).")
+                    if "rc2" in top.get("version", "").lower() or "rc2" in active_rel.lower():
+                        has_bad_release = True
+                        release_ver = top.get("version")
+                    if top.get("diff_summary"):
+                        evidence.append(f"**Configuration Diff**: {top.get('diff_summary')[:140]}")
+
+            elif tool == "inspect_service_config":
+                cfg = output.get("configuration", {})
+                app_cfg = cfg.get("application", {})
+                downstream = cfg.get("downstream_services", {})
+                pg = downstream.get("payment_gateway", {})
+                pg_url = pg.get("endpoint_url", "")
+                timeout = pg.get("timeout_ms")
+                evidence.append(f"**Runtime Configuration**: App Release: {app_cfg.get('release_version')}, Payment Gateway: {pg_url}, Timeout: {timeout}ms.")
+                if "invalid" in pg_url or (timeout is not None and timeout <= 100):
+                    has_bad_release = True
+                    pg_bad_url = pg_url
+
+        if has_db_error and not db_is_healthy:
+            summary = "OrderFlow SQLite database connection failure detected. Product queries and health checks are returning HTTP 500/503 errors."
+            rc = f"OrderFlow SQLite database connection pool exhausted or database file locked ({db_err_snippet or 'connection reset by peer'}). All subsequent database operations fail."
+            cat = "connection_pool_exhaustion"
+            remediation = [
+                "**Step 1 Investigate SQLite Database File**: Check file permissions and write lock state on demo_data.db",
+                "**Step 2 Terminate Stuck Connections**: Clear hung database worker threads and recycle connection pool handles",
+                "**Step 3 Verify Service Health**: Query /health and confirm database reports status healthy with HTTP 200",
+            ]
+            preventative = [
+                "**Connection Pool Monitoring**: Configure alert thresholds for database connection pool saturation",
+                "**SQLite WAL Mode**: Enable Write-Ahead Logging (WAL) to prevent reader/writer lock starvation",
+            ]
+        elif has_high_latency:
+            summary = "OrderFlow checkout endpoint experiencing severe latency degradation exceeding operational SLA thresholds."
+            rc = f"Elevated artificial or downstream endpoint latency on /api/checkout ({round(latency_val, 1)}ms). Requests are delayed, leading to request queue pileups and slow checkout responses."
+            cat = "cpu_runaway"
+            remediation = [
+                "**Step 1 Clear Endpoint Delay**: Clear artificial latency fault or rate-limit delay on /api/checkout",
+                "**Step 2 Profile Checkout Pipeline**: Trace database and downstream payment call latencies in checkout handler",
+                "**Step 3 Latency Verification**: Confirm /api/checkout response time drops below 100ms baseline",
+            ]
+            preventative = [
+                "**Endpoint Latency SLA Alerts**: Configure automated P95 latency alerts on checkout endpoints",
+                "**Downstream Circuit Breaker**: Implement circuit breakers with fast failure fallback for payment requests",
+            ]
+        elif has_bad_release:
+            summary = f"OrderFlow degraded following deployment of faulty release {release_ver or 'v2.4.1-rc2'} with invalid payment gateway routing."
+            rc = f"Faulty demo release {release_ver or 'v2.4.1-rc2'} introduced unresolvable downstream payment gateway URL ({pg_bad_url or 'invalid-payment-gateway.internal'}) and an aggressive 25ms timeout."
+            cat = "bad_deployment"
+            remediation = [
+                "**Step 1 Immediate Rollback**: Roll back active release immediately from v2.4.1-rc2 to stable baseline v2.4.0",
+                "**Step 2 Restore Payment Gateway Settings**: Restore production payment gateway endpoint and 800ms timeout",
+                "**Step 3 Verify Payment Probe**: Check downstream payment gateway diagnostic probe in /api/diagnostics/health",
+            ]
+            preventative = [
+                "**Pre-Release Config Linting**: Enforce automated CI schema checks on payment gateway endpoints and timeout limits",
+                "**Automated Canary Rollback**: Set up automated rollback triggers on health probe failures during canary phase",
+            ]
+        elif has_db_error:
+            summary = "OrderFlow SQLite database connection failure detected. Product queries and health checks are returning HTTP 500/503 errors."
+            rc = f"OrderFlow SQLite database connection pool exhausted or database file locked ({db_err_snippet or 'connection reset by peer'}). All subsequent database operations fail."
+            cat = "connection_pool_exhaustion"
+            remediation = [
+                "**Step 1 Investigate SQLite Database File**: Check file permissions and write lock state on demo_data.db",
+                "**Step 2 Terminate Stuck Connections**: Clear hung database worker threads and recycle connection pool handles",
+                "**Step 3 Verify Service Health**: Query /health and confirm database reports status healthy with HTTP 200",
+            ]
+            preventative = [
+                "**Connection Pool Monitoring**: Configure alert thresholds for database connection pool saturation",
+                "**SQLite WAL Mode**: Enable Write-Ahead Logging (WAL) to prevent reader/writer lock starvation",
+            ]
+        else:
+            summary = "OrderFlow Demo Service operational health check completed. All subsystems functioning normally within baseline limits."
+            rc = "No active defects or performance regressions identified in OrderFlow telemetry, health checks, or logs."
+            cat = "bad_deployment"
+            remediation = [
+                "**Step 1 Continuous Monitoring**: Maintain continuous telemetry monitoring of error rates and latency",
+            ]
+            preventative = [
+                "**Health Probe Alerts**: Maintain automated polling on /health and /api/diagnostics/health",
+            ]
+
+        return DiagnosticReport(
+            incident_summary=summary,
+            identified_root_cause=rc,
+            root_cause_category=cat,
+            evidence_gathered=evidence[:6],
+            remediation_plan=remediation[:6],
+            preventative_measures=preventative[:4],
             safety_boundary_compliance=True,
         )
 

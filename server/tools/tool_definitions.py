@@ -103,14 +103,33 @@ SRE_TOOLS: List[Dict[str, Any]] = [
     },
 ]
 
+HEALTH_CHECK_TOOL: Dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "check_service_health",
+        "description": "Check application and dependency health status (database connectivity, payment gateway downstream, readiness probes). Essential for quickly isolating failing infrastructure subsystems.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "service": {
+                    "type": "string",
+                    "description": "Target service or component name (e.g. 'OrderFlow Demo Service' or 'checkout').",
+                },
+            },
+        },
+    },
+}
+
+LIVE_SRE_TOOLS: List[Dict[str, Any]] = SRE_TOOLS + [HEALTH_CHECK_TOOL]
+
 
 def execute_tool(
     tool_name: str,
     arguments: Dict[str, Any],
-    sandbox: TelemetrySandbox,
+    sandbox: Any,
 ) -> Dict[str, Any]:
     """
-    Dispatches a tool call safely to the telemetry sandbox.
+    Dispatches a tool call safely to the telemetry sandbox (mock or live).
     """
     try:
         if tool_name == "fetch_logs":
@@ -133,6 +152,10 @@ def execute_tool(
             )
         elif tool_name == "inspect_service_config":
             return sandbox.inspect_service_config(
+                service=arguments.get("service", ""),
+            )
+        elif tool_name == "check_service_health":
+            return sandbox.check_service_health(
                 service=arguments.get("service", ""),
             )
         else:

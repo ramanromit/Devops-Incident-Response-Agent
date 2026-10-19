@@ -9,7 +9,7 @@ from typing import Callable, Optional, List, Dict, Any
 
 from scenarios.schema import Scenario
 from server.tools.telemetry_sandbox import TelemetrySandbox
-from server.tools.tool_definitions import SRE_TOOLS, execute_tool
+from server.tools.tool_definitions import SRE_TOOLS, LIVE_SRE_TOOLS, execute_tool
 from server.agent.models import AgentStep, DiagnosticReport, AgentExecutionResult
 from server.agent.llm_client import BaseLLMClient, get_llm_client
 
@@ -23,13 +23,17 @@ class IncidentResponseAgent:
     def __init__(
         self,
         scenario: Scenario,
-        sandbox: Optional[TelemetrySandbox] = None,
+        sandbox: Optional[Any] = None,
         llm_client: Optional[BaseLLMClient] = None,
         provider: Optional[str] = None,
+        available_tools: Optional[List[Dict[str, Any]]] = None,
     ):
         self.scenario = scenario
         self.sandbox = sandbox or TelemetrySandbox(scenario)
         self.llm_client = llm_client or get_llm_client(provider)
+        self.available_tools = available_tools or (
+            LIVE_SRE_TOOLS if (getattr(self.sandbox, "is_live", False) or scenario.id.startswith("live_")) else SRE_TOOLS
+        )
         self.steps: List[AgentStep] = []
 
     def run_investigation(
@@ -51,7 +55,7 @@ class IncidentResponseAgent:
                 decision = self.llm_client.decide_next_step(
                     scenario=self.scenario,
                     step_history=step_history_dicts,
-                    available_tools=SRE_TOOLS,
+                    available_tools=self.available_tools,
                 )
 
                 action = decision.get("action", "finish")
