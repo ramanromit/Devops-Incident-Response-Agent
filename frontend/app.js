@@ -639,7 +639,7 @@ async function renderAgentTimeline(steps, provider, modelName, animate = false) 
   const modelText = modelName ? `Model: <code>${modelName}</code>` : "";
 
   banner.innerHTML = `
-    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; margin-bottom: 14px; font-size: 0.85rem;">
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; margin-bottom: 14px; font-size: 0.85rem;">
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 1.1rem;">${icon}</span>
         <span><strong>Active Engine:</strong> ${engineTitle}</span>
