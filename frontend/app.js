@@ -442,9 +442,11 @@ async function runAgentTriage() {
     }
 
     await renderAgentTimeline(result.steps, result.provider, result.model_name, true);
-    renderFinalReport(result.report);
-    if (result.evaluation && !isLive) {
-      renderIncidentEvaluation(result.evaluation, result.provider, result.model_name);
+    if (result.report) {
+      renderFinalReport(result.report, isLive);
+    }
+    if (result.evaluation) {
+      renderIncidentEvaluation(result.evaluation, result.provider, result.model_name, isLive);
     }
 
     document.getElementById("stepCounterBadge").textContent = `${result.total_steps} Steps Taken`;
@@ -729,25 +731,35 @@ function cleanReportString(str, isRootCause, isSummary) {
 }
 
 // Render Final Report
-function renderFinalReport(report) {
+function renderFinalReport(report, isLive = false) {
   if (!report) return;
 
   const card = document.getElementById("finalReportCard");
 
   // Meta Chips
   const metaChipsContainer = document.getElementById("reportMetaChips");
-  if (metaChipsContainer && activeScenario) {
-    const srv = activeScenario.alert?.service || activeScenario.service || "production";
-    const metric = activeScenario.alert?.metric || "health_check";
-    const val = activeScenario.alert?.current_value != null ? activeScenario.alert.current_value : "Alert";
-    const ts = activeScenario.alert?.timestamp || new Date().toISOString().substring(0, 19) + "Z";
+  if (metaChipsContainer) {
+    if (isLive) {
+      const ts = new Date().toISOString().substring(0, 19) + "Z";
+      metaChipsContainer.innerHTML = `
+        <span class="meta-chip"><span>🖥️</span> Service: <strong>OrderFlow Demo Service</strong></span>
+        <span class="meta-chip"><span>📡</span> Telemetry: <strong>Live Target Runtime</strong></span>
+        <span class="meta-chip"><span style="color: #f87171;">⚠️</span> Mode: <strong style="color: #f87171;">LIVE INCIDENT</strong></span>
+        <span class="meta-chip"><span>⏱️</span> Time: <strong>${escapeHtml(ts)}</strong></span>
+      `;
+    } else if (activeScenario) {
+      const srv = activeScenario.alert?.service || activeScenario.service || "production";
+      const metric = activeScenario.alert?.metric || "health_check";
+      const val = activeScenario.alert?.current_value != null ? activeScenario.alert.current_value : "Alert";
+      const ts = activeScenario.alert?.timestamp || new Date().toISOString().substring(0, 19) + "Z";
 
-    metaChipsContainer.innerHTML = `
-      <span class="meta-chip"><span>🖥️</span> Service: <strong>${escapeHtml(srv)}</strong></span>
-      <span class="meta-chip"><span>📈</span> Metric: <strong>${escapeHtml(metric)} (${escapeHtml(String(val))})</strong></span>
-      <span class="meta-chip"><span style="color: #f87171;">⚠️</span> Severity: <strong style="color: #f87171;">CRITICAL</strong></span>
-      <span class="meta-chip"><span>⏱️</span> Time: <strong>${escapeHtml(ts)}</strong></span>
-    `;
+      metaChipsContainer.innerHTML = `
+        <span class="meta-chip"><span>🖥️</span> Service: <strong>${escapeHtml(srv)}</strong></span>
+        <span class="meta-chip"><span>📈</span> Metric: <strong>${escapeHtml(metric)} (${escapeHtml(String(val))})</strong></span>
+        <span class="meta-chip"><span style="color: #f87171;">⚠️</span> Severity: <strong style="color: #f87171;">CRITICAL</strong></span>
+        <span class="meta-chip"><span>⏱️</span> Time: <strong>${escapeHtml(ts)}</strong></span>
+      `;
+    }
   }
 
   // Executive Incident Summary
@@ -891,14 +903,15 @@ function renderFinalReport(report) {
 
 
 // Render Incident Evaluation Scorecard in Tab 1
-function renderIncidentEvaluation(evalData, provider, modelName) {
+function renderIncidentEvaluation(evalData, provider, modelName, isLive = false) {
   const card = document.getElementById("incidentEvaluationCard");
   if (!card || !evalData) return;
 
   const isGemini = provider === "gemini";
-  const engineTitle = isGemini ? "Google Gemini API" : (provider === "openai" ? "OpenAI Engine" : "Mock SRE Reasoner");
+  const engineTitle = isGemini ? "Google Gemini API" : ((provider && provider.startsWith("groq")) ? "Groq LPU" : (provider === "openai" ? "OpenAI Engine" : "Mock SRE Reasoner"));
   const modelText = modelName ? ` (${modelName})` : "";
-  document.getElementById("evalEngineLabel").textContent = `Evaluated with ${engineTitle}${modelText} against scenario ground-truth criteria`;
+  const criteriaText = isLive ? "live OrderFlow telemetry diagnostic criteria" : "scenario ground-truth criteria";
+  document.getElementById("evalEngineLabel").textContent = `Evaluated with ${engineTitle}${modelText} against ${criteriaText}`;
 
   const verdictBadge = document.getElementById("evalVerdictBadge");
   if (evalData.passed) {

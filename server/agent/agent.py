@@ -130,13 +130,23 @@ class IncidentResponseAgent:
             duration = round(time.time() - start_time, 2)
             provider_name = getattr(self.llm_client, "provider_name", "mock")
             model_name = getattr(self.llm_client, "model", getattr(self.llm_client, "model_name", None))
+            fallback_report = None
+            if step_history_dicts:
+                try:
+                    fallback_report = self.llm_client.generate_final_report(
+                        scenario=self.scenario,
+                        step_history=step_history_dicts,
+                    )
+                except Exception:
+                    fallback_report = None
+
             return AgentExecutionResult(
                 scenario_id=self.scenario.id,
                 success=False,
                 provider=provider_name,
                 model_name=model_name,
                 steps=self.steps,
-                report=None,
+                report=fallback_report,
                 total_steps=len(self.steps),
                 duration_seconds=duration,
                 error=str(e),

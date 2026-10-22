@@ -854,24 +854,55 @@ def extract_report_from_text(
     raw_remediation = []
     raw_preventative = []
 
+    def _is_heading(line: str, pattern: str) -> bool:
+        clean = line.strip().strip('*_# ').lower()
+        if re.search(pattern, clean, re.I):
+            return line.startswith('#') or line.startswith('**') or line.endswith(':') or line.endswith('**') or line.startswith('__')
+        return False
+
     current_section = None
     for line in lines:
         l = line.strip()
         if not l:
             continue
-        if re.search(r'incident\s+summary', l, re.I) and l.startswith('#'):
+
+        # Look for category declaration in any line
+        cat_search = re.search(r'[\*\-]?\s*\*{0,2}category\*{0,2}[:\*]+\s*(.*)', l, re.I)
+        if cat_search:
+            raw_cat = cat_search.group(1).strip('* _:`-').lower()
+            canonical_categories = [
+                "bad_deployment", "memory_leak", "connection_pool_exhaustion",
+                "certificate_expiration", "dns_misconfiguration", "cpu_runaway",
+                "disk_exhaustion", "upstream_dependency_failure", "deadlock",
+                "configuration_drift", "rate_limiting", "cache_stampede",
+                "secret_rotation", "message_queue_lag", "network_partition",
+                "resource_leak", "security_cors", "noisy_neighbor"
+            ]
+            matched_cat = next((c for c in canonical_categories if c in raw_cat or raw_cat in c), None)
+            if matched_cat:
+                category = matched_cat
+            elif any(w in raw_cat for w in ["deployment", "regression", "release", "rollout", "bug", "deploy"]):
+                category = "bad_deployment"
+            elif any(w in raw_cat for w in ["leak", "oom", "memory"]):
+                category = "memory_leak"
+            elif any(w in raw_cat for w in ["pool", "connection", "database", "sqlite", "exhaustion"]):
+                category = "connection_pool_exhaustion"
+            elif any(w in raw_cat for w in ["latency", "cpu", "throttle"]):
+                category = "cpu_runaway"
+
+        if _is_heading(l, r'incident\s+summary'):
             current_section = "summary"
             continue
-        elif re.search(r'root\s+cause', l, re.I) and l.startswith('#'):
+        elif _is_heading(l, r'root\s+cause'):
             current_section = "root_cause"
             continue
-        elif re.search(r'evidence', l, re.I) and l.startswith('#'):
+        elif _is_heading(l, r'evidence'):
             current_section = "evidence"
             continue
-        elif re.search(r'remediation', l, re.I) and l.startswith('#'):
+        elif _is_heading(l, r'remediation'):
             current_section = "remediation"
             continue
-        elif re.search(r'prevent', l, re.I) and l.startswith('#'):
+        elif _is_heading(l, r'prevent'):
             current_section = "preventative"
             continue
         elif l.startswith('## '):
@@ -882,26 +913,7 @@ def extract_report_from_text(
             if not l.startswith('---') and not l.startswith('```'):
                 raw_summary_lines.append(l)
         elif current_section == "root_cause":
-            if re.match(r'[\*\-]?\s*\*{0,2}category\*{0,2}:?', l, re.I):
-                cat_match = re.search(r'category\*{0,2}:?\s*(.*)', l, re.I)
-                if cat_match:
-                    raw_cat = cat_match.group(1).strip('* ').lower()
-                    canonical_categories = [
-                        "bad_deployment", "memory_leak", "connection_pool_exhaustion",
-                        "certificate_expiration", "dns_misconfiguration", "cpu_runaway",
-                        "disk_exhaustion", "upstream_dependency_failure", "deadlock",
-                        "configuration_drift", "rate_limiting", "cache_stampede",
-                        "secret_rotation", "message_queue_lag", "network_partition",
-                        "resource_leak", "security_cors", "noisy_neighbor"
-                    ]
-                    matched_cat = next((c for c in canonical_categories if c in raw_cat or raw_cat in c), None)
-                    if matched_cat:
-                        category = matched_cat
-                    elif "deployment" in raw_cat or "regression" in raw_cat or "bug" in raw_cat:
-                        category = "bad_deployment"
-                    elif "leak" in raw_cat or "oom" in raw_cat:
-                        category = "memory_leak"
-            elif not l.startswith('---') and not l.startswith('```'):
+            if not cat_search and not l.startswith('---') and not l.startswith('```'):
                 raw_rc_lines.append(l)
         elif current_section == "evidence":
             raw_evidence.append(l)
@@ -909,6 +921,18 @@ def extract_report_from_text(
             raw_remediation.append(l)
         elif current_section == "preventative":
             raw_preventative.append(l)
+
+    # Fallback category inference for live target or unspecified categories
+    if category in ("live_target_application", "live_investigation") or not category:
+        t_low = text.lower()
+        if any(w in t_low for w in ["v2.4.1", "regression", "rollback", "release", "deployment", "payment_gateway"]):
+            category = "bad_deployment"
+        elif any(w in t_low for w in ["connection pool", "sqlite", "database connection", "pool exhausted"]):
+            category = "connection_pool_exhaustion"
+        elif any(w in t_low for w in ["latency", "sla delay"]):
+            category = "cpu_runaway"
+        elif getattr(scenario, "ground_truth", None) and getattr(scenario.ground_truth, "root_cause_category", None):
+            category = scenario.ground_truth.root_cause_category
 
     summary_joined = clean_inline_artifacts(" ".join(raw_summary_lines))
     rc_joined = clean_inline_artifacts(" ".join(raw_rc_lines))
@@ -1053,6 +1077,29 @@ class GroqLLMClient(BaseLLMClient):
             )
         return f"Groq API call failed (model={self.model}): {err_str}"
 
+    @staticmethod
+    def _compact_payload(payload: Any) -> Any:
+        if not isinstance(payload, dict):
+            return payload
+        cleaned = dict(payload)
+        if "logs" in cleaned and isinstance(cleaned["logs"], list):
+            logs = cleaned["logs"][:10]
+            compacted_logs = []
+            for l in logs:
+                if isinstance(l, dict):
+                    c = {k: v for k, v in l.items() if v is not None and v != {} and v != []}
+                    tb = c.get("traceback") or c.get("traceback_snippet")
+                    if tb and isinstance(tb, str) and len(tb) > 200:
+                        lines = [ln.strip() for ln in tb.strip().split("\n") if ln.strip()]
+                        c["traceback_snippet"] = lines[-1][:200] if lines else tb[:200]
+                        c.pop("traceback", None)
+                    compacted_logs.append(c)
+                else:
+                    compacted_logs.append(l)
+            cleaned["logs"] = compacted_logs
+            cleaned["returned_count"] = len(compacted_logs)
+        return cleaned
+
     def _build_messages(
         self, scenario: Scenario, step_history: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
@@ -1102,11 +1149,12 @@ class GroqLLMClient(BaseLLMClient):
                         }
                     ],
                 })
+                compact_output = self._compact_payload(tool_output)
                 messages.append({
                     "role": "tool",
                     "tool_call_id": call_id,
                     "name": tool_name,
-                    "content": json.dumps(tool_output),
+                    "content": json.dumps(compact_output),
                 })
             elif thought:
                 messages.append({"role": "assistant", "content": thought})

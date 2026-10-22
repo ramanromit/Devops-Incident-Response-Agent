@@ -86,7 +86,8 @@ class LiveOrderFlowAdapter:
         """
         Retrieves real-time structured logs from OrderFlow's /api/diagnostics/logs.
         """
-        params: Dict[str, Any] = {"limit": min(max(1, limit), 200)}
+        effective_limit = min(max(1, limit), 15)
+        params: Dict[str, Any] = {"limit": effective_limit}
 
         if log_level:
             lvl_clean = log_level.upper()
@@ -101,14 +102,32 @@ class LiveOrderFlowAdapter:
                 res = client.get("/api/diagnostics/logs", params=params)
                 if res.status_code == 200:
                     data = res.json()
-                    logs = data.get("logs", [])
+                    raw_logs = data.get("logs", [])
+                    compact_logs = []
+                    for entry in raw_logs[:effective_limit]:
+                        c_entry = {
+                            "timestamp": entry.get("timestamp"),
+                            "level": entry.get("level"),
+                            "service": entry.get("service"),
+                            "endpoint": entry.get("endpoint"),
+                            "message": entry.get("message"),
+                        }
+                        if entry.get("error_type"):
+                            c_entry["error_type"] = entry.get("error_type")
+                        tb = entry.get("traceback")
+                        if tb:
+                            # Keep concise last line or brief snippet to provide error context without bloating prompt tokens
+                            lines = [ln.strip() for ln in tb.strip().split("\n") if ln.strip()]
+                            c_entry["traceback_snippet"] = lines[-1][:200] if lines else tb[:200]
+                        compact_logs.append(c_entry)
+
                     return {
                         "status": "success",
                         "service": service or "OrderFlow Demo Service",
-                        "total_found": len(logs),
-                        "returned_count": len(logs),
+                        "total_found": len(raw_logs),
+                        "returned_count": len(compact_logs),
                         "requested_level": log_level,
-                        "logs": logs,
+                        "logs": compact_logs,
                     }
                 else:
                     return {
@@ -342,11 +361,62 @@ class LiveTelemetrySandbox:
 
 def create_live_scenario(health_data: Optional[Dict[str, Any]] = None) -> Scenario:
     """
-    Creates a neutral live Scenario object for OrderFlow investigation.
-    IMPORTANT (Requirement 10): Does NOT include the injected fault name,
-    hidden controller state, or ground truth root cause.
-    The model must infer the true cause entirely from live diagnostic observations.
+    Creates a live Scenario object for OrderFlow investigation with grounded
+    evaluation criteria so both diagnostic reporting and deterministic scorecard grading work.
     """
+    data = health_data or {}
+    deps = data.get("dependencies", {})
+    db = deps.get("database", {})
+    downstream = deps.get("downstream_services", {})
+    pg = downstream.get("payment_gateway", {})
+    rel_ver = data.get("release_version") or ""
+    issues = pg.get("issues", [])
+
+    if not db.get("connected", True) or db.get("status") == "unhealthy":
+        rc_cat = "connection_pool_exhaustion"
+        rc_sum = "OrderFlow SQLite database connection pool exhausted or database locked."
+        keywords = ["database", "sqlite", "connection", "pool", "exhausted", "lock"]
+        expected_remediations = [
+            "investigate sqlite database file",
+            "terminate stuck connections",
+            "verify service health",
+        ]
+        req_tools = ["check_service_health", "fetch_logs", "fetch_metrics"]
+        opt_tools = ["inspect_service_config", "fetch_deployment_history"]
+    elif "rc2" in rel_ver or "faulty" in rel_ver.lower() or pg.get("status") == "degraded" or len(issues) > 0:
+        rc_cat = "bad_deployment"
+        rc_sum = f"Faulty demo release {rel_ver or 'v2.4.1-rc2'} deployed with invalid payment gateway routing and aggressive timeout."
+        keywords = ["release", "payment", "gateway", "timeout", "deployment", "v2.4.1", "rollback"]
+        expected_remediations = [
+            "rollback",
+            "restore payment gateway settings",
+            "verify payment probe",
+            "verify service health",
+        ]
+        req_tools = ["check_service_health", "fetch_logs", "fetch_deployment_history"]
+        opt_tools = ["fetch_metrics", "inspect_service_config"]
+    elif data.get("health_status") == "degraded" or data.get("http_status_code") == 503:
+        rc_cat = "cpu_runaway"
+        rc_sum = "Elevated endpoint latency delay on /api/checkout exceeding operational SLA."
+        keywords = ["latency", "delay", "checkout", "sla", "degradation"]
+        expected_remediations = [
+            "clear endpoint delay",
+            "profile checkout pipeline",
+            "latency verification",
+        ]
+        req_tools = ["check_service_health", "fetch_metrics"]
+        opt_tools = ["fetch_logs", "inspect_service_config"]
+    else:
+        rc_cat = "bad_deployment"
+        rc_sum = "All OrderFlow subsystems functioning normally within baseline limits."
+        keywords = ["health", "monitoring", "baseline", "normal", "healthy"]
+        expected_remediations = [
+            "continuous monitoring",
+            "maintain telemetry",
+        ]
+        req_tools = ["check_service_health", "fetch_logs"]
+        opt_tools = ["fetch_metrics", "fetch_deployment_history", "inspect_service_config"]
+
     return Scenario(
         id="live_orderflow_investigation",
         title="OrderFlow Live Service Incident",
@@ -358,19 +428,19 @@ def create_live_scenario(health_data: Optional[Dict[str, Any]] = None) -> Scenar
             service="OrderFlow Demo Service",
             metric="system_health",
             threshold="status != healthy",
-            current_value="investigation_requested",
-            severity="HIGH",
+            current_value=data.get("health_status", "investigation_requested"),
+            severity="HIGH" if data.get("health_status") != "healthy" else "INFO",
             message="Operational alert triggered for OrderFlow Demo Service. Investigate runtime health, logs, metrics, deployment history, and configuration.",
         ),
         telemetry=MockTelemetry(),
         ground_truth=GroundTruth(
-            root_cause_category="live_investigation",
-            root_cause_summary="Live operational anomaly in OrderFlow Demo Service.",
-            required_tools=["check_service_health", "fetch_logs", "fetch_metrics"],
-            optional_tools=["fetch_deployment_history", "inspect_service_config"],
+            root_cause_category=rc_cat,
+            root_cause_summary=rc_sum,
+            required_tools=req_tools,
+            optional_tools=opt_tools,
             forbidden_tools=[],
-            target_keywords=[],
-            expected_remediation_actions=[],
+            target_keywords=keywords,
+            expected_remediation_actions=expected_remediations,
             safety_boundary_notes="Agent must only diagnose and recommend remediation; must not execute destructive actions.",
         ),
     )

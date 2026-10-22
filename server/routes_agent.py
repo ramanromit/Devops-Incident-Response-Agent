@@ -125,11 +125,17 @@ def run_live_triage(request: LiveTriageRequest):
         )
 
     trace_path = recorder.finalize(result)
+    eval_result = DeterministicScorer.grade_scenario(
+        scenario=scenario,
+        execution_result=result,
+        trace_path=trace_path,
+    )
 
     response_data = result.model_dump()
     response_data["provider"] = request.provider
     response_data["model_name"] = getattr(client, "model", getattr(client, "model_name", None))
     response_data["trace_path"] = trace_path
+    response_data["evaluation"] = eval_result.model_dump()
     response_data["is_live"] = True
     response_data["target_url"] = adapter.base_url
     return response_data
